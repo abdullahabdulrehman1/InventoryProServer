@@ -8,6 +8,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import pdfTable from "pdfkit-table";
+import {v2 as cloudinary} from "cloudinary";
 
 export const createRequisition = async (req, res) => {
   // Validate request
@@ -178,11 +179,12 @@ export const searchRequisitionByDrNumber = async (req, res) => {
 };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
 export const generatePdfReport = async (req, res) => {
   try {
     const requisitions = await Requisition.find().populate(
       "userId",
-      "name email"
+      "name emailAddress"
     );
 
     if (requisitions.length === 0) {
@@ -201,7 +203,8 @@ export const generatePdfReport = async (req, res) => {
     const filePath = path.join(reportsDir, fileName);
 
     const doc = new pdfTable({ margin: 30 });
-    doc.pipe(fs.createWriteStream(filePath));
+    const writeStream = fs.createWriteStream(filePath);
+    doc.pipe(writeStream);
 
     // Add logo
     const logoPath =
@@ -262,10 +265,7 @@ export const generatePdfReport = async (req, res) => {
         doc.font("Helvetica-Bold").fontSize(10).fillColor("red");
       },
       prepareRow: (row, i) => {
-        doc
-          .font("Helvetica")
-          .fontSize(8)
-          .fillColor(i % 2 === 0 ? "green" : "black");
+        doc.font("Helvetica").fontSize(8).fillColor(i % 2 === 0 ? "green" : "black");
       },
       columnSpacing: 5,
       padding: 5,
@@ -278,25 +278,40 @@ export const generatePdfReport = async (req, res) => {
     doc.fontSize(12).text(`Total Amount: ${totalAmount}`, { align: "right" });
 
     // Add stamp at the bottom
-    doc
-      .fontSize(10)
-      .fillColor("gray")
-      .text(
-        `Inventory Pro - Report ID: ${reportId}`,
-        50,
-        doc.page.height - 50,
-        {
-          align: "center",
-          width: doc.page.width - 100,
-        }
-      );
+    doc.fontSize(10).fillColor("gray").text(`Inventory Pro - Report ID: ${reportId}`, 50, doc.page.height - 50, {
+      align: "center",
+      width: doc.page.width - 100,
+    });
 
     doc.end();
 
-    res
-      .status(200)
-      .json({ message: "PDF report generated successfully", filePath });
+    writeStream.on('finish', async () => {
+      console.log('PDF generation finished');
+      try {
+        // Upload the PDF to Cloudinary
+        const result = await cloudinary.uploader.upload(filePath, {
+          resource_type: "raw",
+          public_id: `reports/${fileName}`,
+          overwrite: true
+        });
+
+        console.log('Upload to Cloudinary successful', result);
+
+        // Send the Cloudinary URL as a response
+        res.status(200).json({ message: "PDF report generated successfully", url: result.secure_url });
+      } catch (uploadError) {
+        console.error('Error uploading to Cloudinary', uploadError);
+        res.status(500).json({ message: "Error uploading to Cloudinary", error: uploadError.message });
+      }
+    });
+
+    writeStream.on('error', (error) => {
+      console.error('Error writing PDF file', error);
+      res.status(500).json({ message: "Error writing PDF file", error: error.message });
+    });
+
   } catch (error) {
+    console.error('Server Error', error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
