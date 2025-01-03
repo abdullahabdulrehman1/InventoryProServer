@@ -1,4 +1,5 @@
 import { PurchaseOrder } from "../models/poGeneral.js";
+import { User } from "../models/user.js";
 
 export const createPurchaseOrder = async (req, res) => {
   const {
@@ -96,17 +97,26 @@ export const createPurchaseOrder = async (req, res) => {
 export const showPurchaseOrders = async (req, res) => {
   try {
     const userId = req.user.id;
+    const user = await User.findById(userId);
+    const userRole = user?.role; // Assuming role is stored in user.role
 
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
+    let purchaseOrders;
+
+    if (userRole === 1 || userRole === 2) {
+      purchaseOrders = await PurchaseOrder.find().populate(
+        "userId",
+        "name email"
+      );
+    } else if (userRole === 0) {
+      purchaseOrders = await PurchaseOrder.find({ userId }).populate(
+        "userId",
+        "name email"
+      );
+    } else {
+      return res.status(403).json({ message: "Unauthorized access" });
     }
 
-    const purchaseOrders = await PurchaseOrder.find({ userId }).populate(
-      "userId",
-      "name email"
-    );
-
-    res.json(purchaseOrders);
+    res.status(200).json(purchaseOrders);
   } catch (error) {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
@@ -129,22 +139,21 @@ export const deletePurchaseOrder = async (req, res) => {
 };
 
 export const editPurchaseOrder = async (req, res) => {
+  const { purchaseOrderId, updateData } = req.body;
   const {
-    purchaseOrderId,
-    updateData,
-   
-  } = req.body;
-const { userId,
-  poNumber,
-  date,
-  poDelivery,
-  requisitionType,
-  supplier,
-  store,
-  payment,
-  purchaser,
-  remarks,
-  rows} = updateData
+    userId,
+    poNumber,
+    date,
+    poDelivery,
+    requisitionType,
+    supplier,
+    store,
+    payment,
+    purchaser,
+    remarks,
+    rows,
+  } = updateData;
+
   try {
     // Find the purchase order by ID
     const existingPO = await PurchaseOrder.findById(purchaseOrderId);

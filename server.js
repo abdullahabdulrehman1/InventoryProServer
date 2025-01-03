@@ -8,6 +8,10 @@ import userRoutes from "./routes/user.js";
 import cookieParser from "cookie-parser";
 import requisitionRoutes from "./routes/requisitionGeneral.js";
 import poRoutes from "./routes/poGeneral.js";
+import grnRoutes from "./routes/GRNGeneral.js";
+import grnReturnRoutes from './routes/GRNReturnGeneral.js'
+import issueGeneralRoutes from './routes/issueGeneral.js'
+import issueReturnGeneralRoutes from './routes/issueReturnGeneral.js'
 dotenv.config();
 const app = express();
 const MONGO_URI = process.env.MONGO_URI;
@@ -33,7 +37,10 @@ cloudinary.config({
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/requisition", requisitionRoutes);
 app.use("/api/v1/poGeneral", poRoutes);
-
+app.use("/api/v1/grnGeneral", grnRoutes);
+app.use("/api/v1/grnReturnGeneral", grnReturnRoutes);
+app.use("/api/v1/issueGeneral", issueGeneralRoutes);
+app.use("/api/v1/issueReturnGeneral", issueReturnGeneralRoutes);
 app.listen(5000, () => {
   console.log("Server is running on port 5000");
 });

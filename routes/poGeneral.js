@@ -8,7 +8,7 @@ import {
 } from "../controllers/poGeneral.js";
 import {
   createPurchaseOrderValidator,
-  updatePurchaseOrderValidator,
+  
   validatorHandler,
 } from "../libs/validator.js";
 
@@ -24,7 +24,7 @@ app.get("/showPO", showPurchaseOrders);
 app.delete("/deletePO", deletePurchaseOrder);
 app.put(
   "/editPurchaseOrder",
-  updatePurchaseOrderValidator(),
+  createPurchaseOrderValidator(),
   validatorHandler,
   editPurchaseOrder
 );

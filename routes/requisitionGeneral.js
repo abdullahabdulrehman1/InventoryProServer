@@ -6,6 +6,8 @@ import {
   showRequisition,
   deleteRequisition,
   updateRequisition,
+  searchRequisitionByDrNumber,
+  generatePdfReport,
 } from "../controllers/requisitionGeneral.js";
 import {
   createRequisitionValidator,
@@ -30,4 +32,7 @@ app.put(
   validatorHandler,
   updateRequisition
 );
+app.get("/showRequisition", searchRequisitionByDrNumber);
+app.get("/generatePdfReport", generatePdfReport);
+
 export default app;

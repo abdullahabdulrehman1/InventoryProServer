@@ -160,6 +160,66 @@ export const updateRequisitionValidator = () => [
     .withMessage("Remarks cannot exceed 150 characters"),
 ];
 
+export const createGRNValidator = () => [
+  body("grnNumber").notEmpty().withMessage("GRN Number is required"),
+  body("date")
+    .notEmpty()
+    .withMessage("Date is required")
+    .matches(/^\d{2}-\d{2}-\d{4}$/)
+    .withMessage("Invalid date format. Use DD-MM-YYYY."),
+  body("supplierChallanNumber")
+    .notEmpty()
+    .withMessage("Supplier Challan Number is required"),
+  body("supplierChallanDate")
+    .notEmpty()
+    .withMessage("Supplier Challan Date is required")
+    .matches(/^\d{2}-\d{2}-\d{4}$/)
+    .withMessage("Invalid date format. Use DD-MM-YYYY."),
+  body("supplier").notEmpty().withMessage("Supplier is required"),
+  body("inwardNumber").notEmpty().withMessage("Inward Number is required"),
+  body("inwardDate")
+    .notEmpty()
+    .withMessage("Inward Date is required")
+    .matches(/^\d{2}-\d{2}-\d{4}$/)
+    .withMessage("Invalid date format. Use DD-MM-YYYY."),
+  body("remarks").notEmpty().withMessage("Remarks are required"),
+  body("rows").isArray({ min: 1 }).withMessage("At least one row is required"),
+  body("rows.*.poNo").notEmpty().withMessage("PO Number is required"),
+  body("rows.*.department").notEmpty().withMessage("Department is required"),
+  body("rows.*.category").notEmpty().withMessage("Category is required"),
+  body("rows.*.name").notEmpty().withMessage("Name is required"),
+  body("rows.*.unit").notEmpty().withMessage("Unit is required"),
+  body("rows.*.poQty")
+    .notEmpty()
+    .withMessage("PO Quantity is required")
+    .isNumeric()
+    .withMessage("PO Quantity must be a number"),
+  body("rows.*.previousQty")
+    .notEmpty()
+    .withMessage("Previous Quantity is required")
+    .isNumeric()
+    .withMessage("Previous Quantity must be a number"),
+  body("rows.*.balancePoQty")
+    .notEmpty()
+    .withMessage("Balance PO Quantity is required")
+    .isNumeric()
+    .withMessage("Balance PO Quantity must be a number"),
+  body("rows.*.receivedQty")
+    .notEmpty()
+    .withMessage("Received Quantity is required")
+    .isNumeric()
+    .withMessage("Received Quantity must be a number"),
+  body("rows.*.rowRemarks")
+    .optional()
+    .isLength({ max: 150 })
+    .withMessage("Row remarks cannot exceed 150 characters"),
+  body("userId")
+    .notEmpty()
+    .withMessage("User ID is required")
+    .isMongoId()
+    .withMessage("Invalid User ID"),
+];
+
 export const createPurchaseOrderValidator = () => [
   body("userId")
     .notEmpty()
@@ -171,7 +231,11 @@ export const createPurchaseOrderValidator = () => [
     .withMessage("PO Number is required")
     .isLength({ max: 10 })
     .withMessage("PO Number cannot exceed 10 characters"),
-  body("date").notEmpty().withMessage("Date is required"),
+  body("date")
+    .notEmpty()
+    .withMessage("Date is required")
+    
+    .withMessage("Invalid date format. Use DD-MM-YYYY."),
   body("poDelivery").notEmpty().withMessage("PO Delivery is required"),
   body("requisitionType")
     .notEmpty()
@@ -190,11 +254,23 @@ export const createPurchaseOrderValidator = () => [
   body("rows.*.category").notEmpty().withMessage("Category is required"),
   body("rows.*.name").notEmpty().withMessage("Name is required"),
   body("rows.*.uom").notEmpty().withMessage("UOM is required"),
+  body("rows.*.quantity")
+    .notEmpty()
+    .withMessage("Quantity is required")
+    .isNumeric()
+    .withMessage("Quantity must be a number"),
   body("rows.*.rate")
     .notEmpty()
     .withMessage("Rate is required")
     .isNumeric()
     .withMessage("Rate must be a number"),
+ 
+  
+  body("rows.*.discountAmount")
+    .notEmpty()
+    .withMessage("Discount Amount is required")
+    .isNumeric()
+    .withMessage("Discount Amount must be a number"),
 
   body("rows.*.rowRemarks")
     .optional()
@@ -203,41 +279,3 @@ export const createPurchaseOrderValidator = () => [
 ];
 
 
-export const updatePurchaseOrderValidator = () => [
-  body("purchaseOrderId")
-    .notEmpty()
-    .withMessage("Purchase Order ID is required")
-    .isMongoId()
-    .withMessage("Invalid Purchase Order ID"),
-  body("userId")
-    .optional()
-    .isMongoId()
-    .withMessage("Invalid User ID"),
-  body("poNumber")
-    .optional()
-    .isLength({ max: 10 })
-    .withMessage("PO Number cannot exceed 10 characters"),
-  body("date").optional().notEmpty().withMessage("Date is required"),
-  body("poDelivery").optional().notEmpty().withMessage("PO Delivery is required"),
-  body("requisitionType").optional().notEmpty().withMessage("Requisition Type is required"),
-  body("supplier").optional().notEmpty().withMessage("Supplier is required"),
-  body("store").optional().notEmpty().withMessage("Store is required"),
-  body("payment").optional().notEmpty().withMessage("Payment is required"),
-  body("purchaser").optional().notEmpty().withMessage("Purchaser is required"),
-  body("remarks").optional().isLength({ max: 150 }).withMessage("Remarks cannot exceed 150 characters"),
-  body("rows").optional().isArray({ min: 1 }).withMessage("At least one row is required"),
-  body("rows.*.prNo").optional().notEmpty().withMessage("PR Number is required"),
-  body("rows.*.department").optional().notEmpty().withMessage("Department is required"),
-  body("rows.*.category").optional().notEmpty().withMessage("Category is required"),
-  body("rows.*.name").optional().notEmpty().withMessage("Name is required"),
-  body("rows.*.uom").optional().notEmpty().withMessage("UOM is required"),
-  body("rows.*.quantity").optional().notEmpty().isNumeric().withMessage("Quantity must be a number"),
-  body("rows.*.rate").optional().notEmpty().isNumeric().withMessage("Rate must be a number"),
-  body("rows.*.excludingTaxAmount").optional().isNumeric().withMessage("Excluding Tax Amount must be a number"),
-  body("rows.*.gstPercent").optional().isNumeric().withMessage("GST Percent must be a number"),
-  body("rows.*.gstAmount").optional().isNumeric().withMessage("GST Amount must be a number"),
-  body("rows.*.discountAmount").optional().isNumeric().withMessage("Discount Amount must be a number"),
-  body("rows.*.otherChargesAmount").optional().isNumeric().withMessage("Other Charges Amount must be a number"),
-  body("rows.*.totalAmount").optional().isNumeric().withMessage("Total Amount must be a number"),
-  body("rows.*.rowRemarks").optional().isLength({ max: 150 }).withMessage("Row Remarks cannot exceed 150 characters"),
-];
