@@ -26,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+
 connectDB(MONGO_URI);
 
 cloudinary.config({

@@ -32,7 +32,7 @@ app.put(
   validatorHandler,
   updateRequisition
 );
-app.get("/showRequisition", searchRequisitionByDrNumber);
+// app.get("/showRequisition", searchRequisitionByDrNumber);
 app.get("/generatePdfReport", generatePdfReport);
 
 export default app;

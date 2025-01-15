@@ -8,8 +8,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import pdfTable from "pdfkit-table";
-import {v2 as cloudinary} from "cloudinary";
-
+import { v2 as cloudinary } from "cloudinary";
+import axios from "axios";
 export const createRequisition = async (req, res) => {
   // Validate request
   const errors = validationResult(req);
@@ -62,26 +62,39 @@ export const createRequisition = async (req, res) => {
 };
 export const showRequisition = async (req, res) => {
   try {
-    // Retrieve userId from request parameters or query
     const userId = req?.user?.id;
     const user = await User.findById(userId);
-    const userRole = user?.role; // Assuming role is stored in req.user.role
+    const userRole = user?.role;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     let requisitions;
-    console.log("use", userRole);
+    let totalRecords;
+
     if (userRole === 1 || userRole === 2) {
-      requisitions = await Requisition.find().populate("userId", "name email");
+      totalRecords = await Requisition.countDocuments();
+      requisitions = await Requisition.find()
+        .populate("userId", "name email")
+        .skip(skip)
+        .limit(limit);
     } else if (userRole === 0) {
-      requisitions = await Requisition.find({ userId }).populate(
-        "userId",
-        "name email"
-      );
+      totalRecords = await Requisition.countDocuments({ userId });
+      requisitions = await Requisition.find({ userId })
+        .populate("userId", "name email")
+        .skip(skip)
+        .limit(limit);
     } else {
       return res.status(403).json({ message: "Unauthorized access" });
     }
 
-    res.status(200).json(requisitions);
+    res.status(200).json({
+      data: requisitions,
+      totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit),
+    });
   } catch (error) {
-    // Handle any errors that occur during the fetch
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
@@ -179,17 +192,65 @@ export const searchRequisitionByDrNumber = async (req, res) => {
 };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
 export const generatePdfReport = async (req, res) => {
+  const { fromDate, toDate, sortBy, order, columns } = req.query;
+
+  // Validate the dates
+  if (!fromDate || !toDate) {
+    return res.status(400).json({ message: "Invalid date range" });
+  }
+
   try {
-    const requisitions = await Requisition.find().populate(
+    // Convert fromDate and toDate to Date objects
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+
+    // Fetch user details
+    const user = await User.findById(req.user.id);
+
+    // Define valid sorting fields
+    const validSortFields = ["date", "amount", "department", "drNumber"];
+    if (!validSortFields.includes(sortBy)) {
+      return res.status(400).json({ message: `Invalid sort field: ${sortBy}` });
+    }
+
+    // Determine the query based on the user's role
+    let query = {
+      date: {
+        $gte: from,
+        $lte: to,
+      },
+    };
+
+    if (user.role === 0) {
+      query.userId = user._id;
+    }
+
+    // Fetch requisitions without sorting initially
+    const requisitions = await Requisition.find(query).populate(
       "userId",
       "name emailAddress"
     );
 
-    if (requisitions.length === 0) {
-      return res.status(404).json({ message: "No requisitions found" });
+    if (!requisitions || requisitions.length === 0) {
+      return res.status(404).json({
+        message: "No requisitions found for the specified date range.",
+      });
     }
+
+    // Sort requisitions based on sortBy
+    const sortedRequisitions = requisitions.sort((a, b) => {
+      if (sortBy === "amount") {
+        const totalA = a.items.reduce((sum, item) => sum + item.amount, 0);
+        const totalB = b.items.reduce((sum, item) => sum + item.amount, 0);
+        return order === "asc" ? totalA - totalB : totalB - totalA;
+      } else {
+        const valueA = a[sortBy];
+        const valueB = b[sortBy];
+        if (order === "asc") return valueA > valueB ? 1 : -1;
+        return valueA < valueB ? 1 : -1;
+      }
+    });
 
     // Ensure the reports directory exists
     const reportsDir = path.join(__dirname, "reports");
@@ -206,112 +267,136 @@ export const generatePdfReport = async (req, res) => {
     const writeStream = fs.createWriteStream(filePath);
     doc.pipe(writeStream);
 
-    // Add logo
-    const logoPath =
-      "C:/Users/Abdullah/Downloads/Blue Flat Illustrative Human Artificial Intelligence Technology Logo.png";
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 50, 45, { width: 50 });
-    }
-
-    // Add title
-    doc.fontSize(20).text("Inventory Pro", 110, 57);
+    // Add title and user details
+    doc.fontSize(24).text("Inventory Pro", 110, 57);
     doc.fontSize(20).text("Requisition Report", { align: "center" });
     doc.moveDown();
+    doc.fontSize(12).text(`Report-ID: ${reportId}`, 110, 140);
+    doc.fontSize(12).text(`Requester: ${user.name}`, 110, 160);
+    doc.fontSize(12).text(`Email: ${user.emailAddress}`, 110, 180);
+    doc.fontSize(12).text(`Report Date: ${today}`, 110, 200);
+    doc.fontSize(12).text(`From: ${fromDate} To: ${toDate}`, 110, 220);
+    doc.moveDown();
 
-    let totalAmount = 0;
+    // Define default columns
+    const defaultColumns = [
+      { label: "DR Number", property: "drNumber", width: 60 },
+      { label: "Date", property: "date", width: 60 },
+      { label: "Department", property: "department", width: 80 },
+      { label: "Requisition Type", property: "requisitionType", width: 80 },
+      { label: "Item Name", property: "itemName", width: 80 },
+      { label: "Quantity", property: "quantity", width: 60 },
+      { label: "Rate", property: "rate", width: 60 },
+      { label: "Amount", property: "amount", width: 60 },
+    ];
 
+    // Parse and validate selected columns
+    const selectedColumns = columns
+      ? columns
+          .split(",")
+          .map((col) => defaultColumns.find((c) => c.property === col))
+          .filter(Boolean)
+      : defaultColumns;
+
+    if (selectedColumns.length === 0) {
+      return res.status(400).json({ message: "Invalid columns selected" });
+    }
+
+    // Prepare table headers and rows
     const table = {
-      headers: [
-        { label: "DR Number", property: "drNumber", width: 60, renderer: null },
-        { label: "Date", property: "date", width: 60, renderer: null },
-        {
-          label: "Department",
-          property: "department",
-          width: 80,
-          renderer: null,
-        },
-        {
-          label: "Requisition Type",
-          property: "requisitionType",
-          width: 80,
-          renderer: null,
-        },
-        { label: "Item Name", property: "itemName", width: 80, renderer: null },
-        { label: "Quantity", property: "quantity", width: 60, renderer: null },
-        { label: "Rate", property: "rate", width: 60, renderer: null },
-        { label: "Amount", property: "amount", width: 60, renderer: null },
-      ],
+      headers: selectedColumns,
       rows: [],
     };
 
-    requisitions.forEach((requisition) => {
+    // Initialize totals
+    let totalAmount = 0;
+    let totalRate = 0;
+    let totalQuantity = 0;
+    let totalItems = 0;
+
+    sortedRequisitions.forEach((requisition) => {
       requisition.items.forEach((item) => {
-        table.rows.push([
-          requisition.drNumber,
-          moment(requisition.date).format("YYYY-MM-DD"),
-          requisition.department,
-          requisition.requisitionType,
-          item.itemName,
-          item.quantity,
-          item.rate,
-          item.amount,
-        ]);
-        totalAmount += item.amount;
+        const row = selectedColumns.map((col) => {
+          if (col.property === "date") {
+            return moment(requisition.date).format("YYYY-MM-DD");
+          } else if (col.property === "itemName") {
+            return item.itemName;
+          } else if (col.property === "quantity") {
+            totalQuantity += item.quantity;
+            return item.quantity;
+          } else if (col.property === "rate") {
+            totalRate += item.rate;
+            return item.rate;
+          } else if (col.property === "amount") {
+            totalAmount += item.amount;
+            return item.amount;
+          } else {
+            return requisition[col.property] || "";
+          }
+        });
+        table.rows.push(row);
+        totalItems++;
       });
     });
 
+    // Add totals row
+    const totalsRow = selectedColumns.map((col) => {
+      if (col.property === "quantity") {
+        return totalQuantity;
+      } else if (col.property === "rate") {
+        return totalRate;
+      } else if (col.property === "amount") {
+        return totalAmount;
+      } else {
+        return "";
+      }
+    });
+    table.rows.push(totalsRow);
+
+    // Generate table in PDF
     doc.table(table, {
       prepareHeader: () => {
-        doc.font("Helvetica-Bold").fontSize(10).fillColor("red");
+        doc.font("Helvetica-Bold").fontSize(10);
       },
       prepareRow: (row, i) => {
-        doc.font("Helvetica").fontSize(8).fillColor(i % 2 === 0 ? "green" : "black");
+        doc.font("Helvetica").fontSize(8);
       },
       columnSpacing: 5,
       padding: 5,
       width: 500,
       x: 50,
-      y: 150,
-    });
-
-    doc.moveDown();
-    doc.fontSize(12).text(`Total Amount: ${totalAmount}`, { align: "right" });
-
-    // Add stamp at the bottom
-    doc.fontSize(10).fillColor("gray").text(`Inventory Pro - Report ID: ${reportId}`, 50, doc.page.height - 50, {
-      align: "center",
-      width: doc.page.width - 100,
+      y: 280,
     });
 
     doc.end();
 
-    writeStream.on('finish', async () => {
-      console.log('PDF generation finished');
-      try {
-        // Upload the PDF to Cloudinary
-        const result = await cloudinary.uploader.upload(filePath, {
-          resource_type: "raw",
-          public_id: `reports/${fileName}`,
-          overwrite: true
-        });
+    writeStream.on("finish", async () => {
+      // Upload to Cloudinary and send response
+      const result = await cloudinary.uploader.upload(filePath, {
+        resource_type: "raw",
+        public_id: `reports/${fileName}`,
+        overwrite: true,
+      });
 
-        console.log('Upload to Cloudinary successful', result);
-
-        // Send the Cloudinary URL as a response
-        res.status(200).json({ message: "PDF report generated successfully", url: result.secure_url });
-      } catch (uploadError) {
-        console.error('Error uploading to Cloudinary', uploadError);
-        res.status(500).json({ message: "Error uploading to Cloudinary", error: uploadError.message });
-      }
+      res.status(200).json({
+        message: "PDF report generated successfully",
+        url: result.secure_url,
+        totals: {
+          totalAmount,
+          totalRate,
+          totalQuantity,
+          totalItems,
+        },
+      });
     });
 
-    writeStream.on('error', (error) => {
-      console.error('Error writing PDF file', error);
-      res.status(500).json({ message: "Error writing PDF file", error: error.message });
+    writeStream.on("error", (error) => {
+      res
+        .status(500)
+        .json({ message: "Error writing PDF file", error: error.message });
     });
-
   } catch (error) {
-    console.error('Server Error', error);
+    console.error("Server Error:", error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };

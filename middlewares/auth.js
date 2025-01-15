@@ -3,13 +3,16 @@ import { ErrorHandler } from "../utils/utility.js";
 import { User } from "../models/user.js";
 
 export const isAuthenticated = async (req, res, next) => {
-  let token = req.body.token;
-  if (!token) {
-    token = req.query.token;
+  let token =  req.headers['authorization'];
+
+  if (token && token.startsWith('Bearer ')) {
+    token = token.split(' ')[1];
   }
+
   if (!token) {
     return res.status(401).send("Access Denied. No token provided.");
   }
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
